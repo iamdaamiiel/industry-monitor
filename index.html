@@ -26,7 +26,7 @@
     const errorMsg = document.getElementById("errorMsg");
 
     try {
-      // This sends the credentials to your live Node.js server
+      // 1. Send the data to your Render API
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -35,41 +35,34 @@
 
       const result = await response.json();
 
-      if (result.success) {
-        // Store the admin status for the dashboard
+      // 2. Check if the login was successful
+      if (response.ok) {
+        // Save user info for the dashboard
         localStorage.setItem('userRole', result.role);
-        localStorage.setItem('username', username);
-        window.location.href = "dashboard.html";
+        localStorage.setItem('username', result.username);
+
+        // Show success message
+        errorMsg.textContent = "Login successful! Redirecting...";
+        errorMsg.style.color = "green";
+
+        // 3. Redirect to the dashboard after a short delay
+        setTimeout(() => {
+          window.location.href = "dashboard.html";
+        }, 1500);
+        
       } else {
+        // Show the "Invalid credentials" or other error from the server
         errorMsg.textContent = result.message;
+        errorMsg.style.color = "red";
       }
     } catch (error) {
       errorMsg.textContent = "Cannot connect to the monitoring server.";
+      errorMsg.style.color = "red";
     }
   }
 
+  // Attach the function to your button
   document.getElementById("loginBtn").addEventListener("click", login);
-
-const result = await response.json();
-
-if (response.ok) {
-    // 1. Save user info so the dashboard knows who logged in
-    localStorage.setItem('userRole', result.role);
-    localStorage.setItem('username', result.username);
-
-    // 2. Show the success message (which you already have)
-    document.getElementById('message').textContent = "Login successful! Redirecting...";
-    document.getElementById('message').style.color = "green";
-
-    // 3. THE FIX: Redirect after 1.5 seconds
-    setTimeout(() => {
-        window.location.href = "dashboard.html";
-    }, 1500);
-} else {
-    document.getElementById('message').textContent = result.message;
-    document.getElementById('message').style.color = "red";
-}
-
 </script>
 
 </body>
