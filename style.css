@@ -1,0 +1,106 @@
+/* GLOBAL STYLES */
+body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* LOGIN SPECIFIC: Use this only on the Login/Register pages */
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.login-box {
+    background: white;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    width: 350px;
+    text-align: center;
+}
+
+/* DASHBOARD LAYOUT: Fixing the Overlap */
+.dashboard-container {
+    width: 95%;
+    max-width: 1200px;
+    margin: 40px auto; /* Adds space at the top */
+    background: rgba(255, 255, 255, 0.95); /* Slight transparency */
+    padding: 30px;
+    border-radius: 15px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* 3 equal columns */
+    gap: 20px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+}
+
+.welcome-header {
+    grid-column: 1 / span 3;
+    text-align: left;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* Make the chart big and span 2 columns */
+.chart-section {
+    grid-column: 1 / span 2;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    min-height: 350px;
+}
+
+/* The side column for stats cards */
+.stats-grid {
+    grid-column: 3 / span 1; /* Puts them in the 3rd column */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.monitor-card {
+    padding: 15px;
+    border-radius: 8px;
+    background: #fdfdfd;
+    border-left: 5px solid #4facfe; /* Industry style accent */
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.activity-feed {
+    grid-column: 1 / span 3; /* Logs take the full bottom row */
+    background: #f9f9f9;
+}
+
+/* Form Elements */
+input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #4facfe;
+    border: none;
+    color: white;
+    font-size: 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+button:hover { background: #00c6ff; }
+
+.logout-btn {
+    background: #ff4b2b;
+    grid-column: 1 / span 3; /* Centered at bottom */
+    width: 200px;
+    margin: 20px auto;
+}

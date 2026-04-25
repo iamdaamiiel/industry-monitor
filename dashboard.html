@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="style.css">
+  <title>Industry Monitor - Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="dashboard-container">
+  <h2 id="welcomeMsg">Industry Monitor</h2>
+  <hr>
+
+  <div class="monitor-card chart-section" style="margin-top: 20px;">
+    <h3>Live Network Latency</h3>
+    <canvas id="latencyChart"></canvas>
+</div>
+
+  <div class="stats-grid">
+    <div class="monitor-card" id="connectivityCard">
+      <h3>Connectivity</h3>
+      <p>Status: <strong class="status-text" style="color: green;">Online</strong></p>
+      <p>Ping: <span id="pingVal">18ms</span></p>
+    </div>
+
+    <div class="monitor-card" id="repoCard">
+      <h3>DevOps Repos</h3>
+      <h1 id="repoCount" style="color: #4facfe;">--</h1>
+      <div id="repoDetails">
+         <p>Loading GitHub Data...</p>
+      </div>
+      <button class="admin-only" onclick="updateStock('General', 10)" style="width: auto; margin-top: 10px;">Edit Inventory</button>
+    </div>
+
+    <div class="monitor-card">
+      <h3>Live Data</h3>
+      <h1 id="throughputVal">850 <span style="font-size: 14px;">Mbps</span></h1>
+    </div>
+  </div>
+
+  <div class="monitor-card activity-feed" style="margin-top: 20px; text-align: left;">
+    <h3>Recent Activity Logs</h3>
+    <div id="logContainer" style="max-height: 200px; overflow-y: auto; font-size: 14px; font-family: monospace;">
+      <p>Loading recent edits...</p>
+    </div>
+  </div>
+
+  <button class="logout-btn" onclick="logout()">Logout</button>
+</div>
+
+<script>
+
+  // Check if the user is actually logged in
+if (!localStorage.getItem('userRole')) {
+    alert("Access Denied. Please login first.");
+    window.location.href = "index.html";
+}
+
+  // Check privileges exactly as we discussed for the "selected few"
+  const role = localStorage.getItem('userRole');
+  const user = localStorage.getItem('username');
+  
+  if(user) {
+    document.getElementById('welcomeMsg').textContent = `Welcome, ${user}`;
+  }
+
+  // Hide edit buttons if not an admin
+  if (role !== 'admin') {
+    const adminButtons = document.querySelectorAll('.admin-only');
+    adminButtons.forEach(btn => btn.style.display = 'none');
+  }
+
+  function logout() {
+    localStorage.clear();
+    window.location.href = "index.html";
+  }
+
+async function updateStock(itemName, newQuantity) {
+    const username = localStorage.getItem('username');
+    const role = localStorage.getItem('userRole');
+
+    const response = await fetch('/api/update-inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, role, itemName, newQuantity })
+    });
+
+    const result = await response.json();
+    alert(result.message);
+}
+
+async function loadLogs() {
+    try {
+        const response = await fetch('/api/logs');
+        const logs = await response.json();
+        const container = document.getElementById('logContainer');
+        
+        container.innerHTML = logs.map(log => `
+            <div style="border-bottom: 1px solid #eee; padding: 5px 0;">
+                <span style="color: #4facfe;">[${new Date(log.timestamp).toLocaleTimeString()}]</span> 
+                <strong>${log.admin_username}</strong>: ${log.action_performed} (${log.item_affected})
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error("Failed to load logs");
+    }
+}
+
+// Load logs immediately and refresh every 30 seconds
+loadLogs();
+setInterval(loadLogs, 30000);
+
+function logout() {
+    // 1. Clear the saved role and username from the browser
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('username');
+
+    // 2. Redirect back to the login page
+    window.location.href = "index.html";
+}
+
+const ctx = document.getElementById('latencyChart').getContext('2d');
+const latencyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [], 
+        datasets: [{
+            label: 'Latency (ms)',
+            data: [],
+            borderColor: '#4facfe',
+            backgroundColor: 'rgba(79, 172, 254, 0.2)',
+            fill: true,
+            tension: 0.4
+        }]
+    }
+});
+
+// Update chart every 3 seconds with simulated connectivity data
+setInterval(async () => {
+    const startTime = Date.now();
+    try {
+        await fetch('https://api.github.com', { mode: 'no-cors' });
+        const latency = Date.now() - startTime;
+        const time = new Date().toLocaleTimeString();
+        
+        // Update the Connectivity Card UI dynamically
+        const statusText = document.querySelector('.status-text');
+        const pingVal = document.getElementById('pingVal');
+        
+        pingVal.textContent = `${latency}ms`;
+
+        if (latency > 200) {
+            statusText.textContent = "High Latency";
+            statusText.style.color = "orange";
+        } else {
+            statusText.textContent = "All Systems Operational";
+            statusText.style.color = "green";
+        }
+
+        // Update Chart
+        if (latencyChart.data.labels.length > 15) {
+            latencyChart.data.labels.shift();
+            latencyChart.data.datasets[0].data.shift();
+        }
+        latencyChart.data.labels.push(time);
+        latencyChart.data.datasets[0].data.push(latency);
+        latencyChart.data.update();
+
+    } catch (e) {
+        document.querySelector('.status-text').textContent = "Offline";
+        document.querySelector('.status-text').style.color = "red";
+    }
+}, 5000);
+
+// Function to fetch real connectivity status from GitHub
+async function fetchGitHubStatus() {
+    try {
+        const response = await fetch('https://www.githubstatus.com/api/v2/status.json');
+        const data = await response.json();
+        const statusEl = document.querySelector('.status-text');
+        statusEl.textContent = data.status.description;
+        statusEl.style.color = data.status.indicator === 'none' ? 'green' : 'orange';
+    } catch (error) { console.error("Status API failed"); }
+}
+
+// Function to track your GitHub Repo Stats (Real Data)
+async function fetchRepoStats() {
+    const username = 'your-github-username'; // Replace with yours!
+    try {
+        const response = await fetch(`https://api.github.com/users/${username}/repos`);
+        const repos = await response.json();
+        
+        // Update the "Items Tracked" card with your repo count
+        document.querySelector('.monitor-card:nth-child(2) h1').textContent = repos.length;
+    } catch (error) {
+        console.error("GitHub Repo API failed");
+    }
+}
+
+// Call these on load
+loadLogs();
+fetchGitHubStatus();
+fetchRepoStats();
+fetchDetailedGitHub(); // <-- MAKE SURE THIS LINE IS HERE
+
+function updateDataThroughput() {
+    const throughput = (Math.random() * (950 - 800) + 800).toFixed(2);
+    document.getElementById('throughputVal').innerHTML = `${throughput} <span style="font-size: 14px;">Mbps</span>`;
+}
+
+setInterval(updateDataThroughput, 2000);
+
+async function fetchDetailedGitHub() {
+    const username = 'iamdaamiiel'; 
+    const repoDetails = document.getElementById('repoDetails');
+    
+    // Check if we already have data in this session to save API calls
+    const cachedData = sessionStorage.getItem('githubData');
+    if (cachedData) {
+        renderGitHub(JSON.parse(cachedData));
+        return;
+    }
+
+    try {
+        const response = await fetch(`https://api.github.com/users/${username}`);
+        if (!response.ok) throw new Error("API Limit");
+        const data = await response.json();
+        
+        sessionStorage.setItem('githubData', JSON.stringify(data));
+        renderGitHub(data);
+    } catch (e) {
+        repoDetails.innerHTML = `<p style="color:orange;">GitHub API busy...</p>`;
+    }
+}
+
+function renderGitHub(data) {
+    document.getElementById('repoCount').textContent = data.public_repos;
+    document.getElementById('repoDetails').innerHTML = `
+        <p>Followers: ${data.followers}</p>
+        <a href="${data.html_url}" target="_blank" style="color:#4facfe; font-size:12px;">View Profile</a>
+    `;
+}
+  
+</script>
+
+</body>
+</html>
