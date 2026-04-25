@@ -50,6 +50,26 @@
 
   document.getElementById("loginBtn").addEventListener("click", login);
 
+const result = await response.json();
+
+if (response.ok) {
+    // 1. Save user info so the dashboard knows who logged in
+    localStorage.setItem('userRole', result.role);
+    localStorage.setItem('username', result.username);
+
+    // 2. Show the success message (which you already have)
+    document.getElementById('message').textContent = "Login successful! Redirecting...";
+    document.getElementById('message').style.color = "green";
+
+    // 3. THE FIX: Redirect after 1.5 seconds
+    setTimeout(() => {
+        window.location.href = "dashboard.html";
+    }, 1500);
+} else {
+    document.getElementById('message').textContent = result.message;
+    document.getElementById('message').style.color = "red";
+}
+
 </script>
 
 </body>
