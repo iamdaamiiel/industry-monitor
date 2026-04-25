@@ -48,16 +48,28 @@ app.post('/api/register', async (req, res) => {
 // LOGIN: Checks the MySQL database for the user
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-    const sql = "SELECT * FROM users WHERE username = ? AND password = ?";
-    
-    db.query(sql, [username, password], (err, results) => {
-        if (err) return res.status(500).json({ success: false, message: "Database error" });
-        
+    const sql = "SELECT * FROM users WHERE username = ?";
+
+    db.query(sql, [username], async (err, results) => {
+        if (err) return res.status(500).json({ message: "Database error" });
+
         if (results.length > 0) {
-            // User found in database!
-            res.json({ success: true, role: results[0].role });
+            // CRITICAL: Compare the typed password with the hashed password from the DB
+            const isMatch = await bcrypt.compare(password, results[0].password);
+
+            if (isMatch) {
+                res.json({ 
+                    message: "Login successful", 
+                    role: results[0].role, 
+                    username: results[0].username 
+                });
+            } else {
+                // Password didn't match the hash
+                res.status(401).json({ message: "Invalid credentials" });
+            }
         } else {
-            res.status(401).json({ success: false, message: "Invalid credentials" });
+            // User not found
+            res.status(401).json({ message: "Invalid credentials" });
         }
     });
 });
