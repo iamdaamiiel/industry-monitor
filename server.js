@@ -1,86 +1,99 @@
 const express = require('express');
-const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+
+// Import initializeApp and cert directly using standard CommonJS destructured syntax
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+
 const app = express();
 
 app.use(bodyParser.json());
 app.use(express.static(__dirname));
 
-// Database Connection
-const db = mysql.createConnection({
-    host: process.env.MYSQLHOST || 'localhost',
-    user: process.env.MYSQLUSER || 'root',
-    password: process.env.MYSQLPASSWORD || '', 
-    database: process.env.MYSQLDATABASE || 'industry_monitor',
-    port: process.env.MYSQLPORT || 3306
+// Load your credentials key file
+const serviceAccount = require('./serviceAccountKey.json');
+
+// Initialize the application using the direct functions
+initializeApp({
+    credential: cert(serviceAccount)
 });
 
-db.connect(err => {
-    if (err) console.error('Database connection failed:', err);
-    else console.log('Connected to XAMPP MySQL Database');
-});
+const db = getFirestore();
+console.log('Connected to Firebase Firestore Database');
 
 // Serve the login page at http://localhost:3000
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// REGISTRATION: Saves new users to the MySQL database
-const bcrypt = require('bcryptjs');
-
+// REGISTRATION: Saves new users to the Firestore 'users' collection
 app.post('/api/register', async (req, res) => {
     const { username, password, role } = req.body;
     try {
+        // Reference to the specific user document using the username as the ID
+        const userRef = db.collection('users').doc(username);
+        const doc = await userRef.get();
+
+        // Enforce unique user constraint
+        if (doc.exists) {
+            return res.status(500).json({ success: false, message: "User already exists" });
+        }
+
         // Hash the password (10 is the security "salt" level)
         const hashedPassword = await bcrypt.hash(password, 10);
-        
-        const sql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
-        db.query(sql, [username, hashedPassword, role], (err, result) => {
-            if (err) return res.status(500).json({ success: false, message: "User already exists" });
-            res.json({ success: true, message: "Account secured and created!" });
+
+        // Save the new user
+        await userRef.set({
+            username,
+            password: hashedPassword,
+            role,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
+
+        res.json({ success: true, message: "Account secured and created!" });
     } catch (error) {
+        console.error("Registration error:", error);
         res.status(500).json({ success: false, message: "Security error" });
     }
 });
 
-// LOGIN: Checks the MySQL database for the user
-app.post('/api/login', (req, res) => {
+// LOGIN: Checks the Firestore 'users' collection for the user
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    const sql = "SELECT * FROM users WHERE username = ?";
+    try {
+        const userRef = db.collection('users').doc(username);
+        const doc = await userRef.get();
 
-    db.query(sql, [username], async (err, results) => {
-        if (err) return res.status(500).json({ message: "Database error" });
-
-        if (results.length > 0) {
-            // CRITICAL: Compare the typed password with the hashed password from the DB
-            const isMatch = await bcrypt.compare(password, results[0].password);
-
-            if (isMatch) {
-                res.json({ 
-                    message: "Login successful", 
-                    role: results[0].role, 
-                    username: results[0].username 
-                });
-            } else {
-                // Password didn't match the hash
-                res.status(401).json({ message: "Invalid credentials" });
-            }
-        } else {
+        if (!doc.exists) {
             // User not found
+            return res.status(401).json({ message: "Invalid credentials" });
+        }
+
+        const userData = doc.data();
+
+        // Compare the typed password with the hashed password from Firestore
+        const isMatch = await bcrypt.compare(password, userData.password);
+
+        if (isMatch) {
+            res.json({ 
+                message: "Login successful", 
+                role: userData.role, 
+                username: userData.username 
+            });
+        } else {
+            // Password didn't match the hash
             res.status(401).json({ message: "Invalid credentials" });
         }
-    });
+    } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ message: "Database error" });
+    }
 });
 
-   const PORT = process.env.PORT || 3000; // Uses the cloud's port or 3000 locally
-app.listen(PORT, () => {
-    console.log(`Server is live on port ${PORT}`);
-    });
-
 // Route for Admins to update inventory and log the action
-app.post('/api/update-inventory', (req, res) => {
+app.post('/api/update-inventory', async (req, res) => {
     const { username, role, itemName, newQuantity } = req.body;
 
     // Check for administrative privileges
@@ -88,27 +101,46 @@ app.post('/api/update-inventory', (req, res) => {
         return res.status(403).json({ success: false, message: "Access denied. Admins only." });
     }
 
-    // 1. Record the action in the activity_logs table
-    const logSql = "INSERT INTO activity_logs (admin_username, action_performed, item_affected) VALUES (?, ?, ?)";
-    const actionDesc = `Updated quantity to ${newQuantity}`;
+    try {
+        const actionDesc = `Updated quantity to ${newQuantity}`;
 
-    db.query(logSql, [username, actionDesc, itemName], (err, result) => {
-        if (err) {
-            console.error("Logging failed:", err);
-            return res.status(500).json({ success: false, message: "Failed to log action" });
-        }
+        // 1. Record the action in the 'activity_logs' collection
+        await db.collection('activity_logs').add({
+            admin_username: username,
+            action_performed: actionDesc,
+            item_affected: itemName,
+            timestamp: admin.firestore.FieldValue.serverTimestamp() // Automatically adds the current time
+        });
         
-        // 2. Here you would also update your goods_inventory table
+        // 2. Here you would also update your goods_inventory collection if needed
         res.json({ success: true, message: "Inventory updated and logged successfully!" });
-    });
+    } catch (error) {
+        console.error("Logging failed:", error);
+        return res.status(500).json({ success: false, message: "Failed to log action" });
+    }
 });
 
 // Fetch the latest 10 activity logs
-app.get('/api/logs', (req, res) => {
-    const sql = "SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 10";
-    
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json({ success: false, message: "Error fetching logs" });
+app.get('/api/logs', async (req, res) => {
+    try {
+        const logsSnapshot = await db.collection('activity_logs')
+            .orderBy('timestamp', 'desc')
+            .limit(10)
+            .get();
+
+        const results = [];
+        logsSnapshot.forEach(doc => {
+            results.push({ id: doc.id, ...doc.data() });
+        });
+
         res.json(results);
-    });
+    } catch (error) {
+        console.error("Error fetching logs:", error);
+        return res.status(500).json({ success: false, message: "Error fetching logs" });
+    }
+});
+
+const PORT = process.env.PORT || 3000; 
+app.listen(PORT, () => {
+    console.log(`Server is live on port ${PORT}`);
 });
